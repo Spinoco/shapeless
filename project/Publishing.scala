@@ -57,15 +57,24 @@ object Publishing {
   def settings: Seq[Setting[_]] = Seq(
     credentialsSetting,
     publishMavenStyle := true,
-    publishTo <<= version((v: String) => Some( if (v.trim endsWith "SNAPSHOT") ossSnapshots else ossStaging)),
+    publishTo <<= (version).apply { v =>
+      val nexus = "https://maven.spinoco.com/"
+      if (v.trim.endsWith("SNAPSHOT"))
+        Some("Snapshots" at nexus + "nexus/content/repositories/snapshots")
+      else
+        Some("Releases" at nexus + "nexus/content/repositories/releases")
+    },
     publishArtifact in Test := false,
-    pomIncludeRepository := (_ => false),
-    pomExtra <<= (scalaVersion)(generatePomExtra)
+    pomIncludeRepository := (_ => false)
   )
 
   lazy val credentialsSetting =
-    credentials ++= (for {
-      user <- sys.env.get("SONATYPE_USER")
-      pass <- sys.env.get("SONATYPE_PASS")
-    } yield Credentials("Sonatype Nexus Repository Manager", "oss.sonatype.org", user, pass)).toSeq
+    credentials += {
+      Seq("build.publish.user", "build.publish.password").map(k => Option(System.getProperty(k))) match {
+        case Seq(Some(user), Some(pass)) =>
+          Credentials("Sonatype Nexus Repository Manager", "oss.sonatype.org", user, pass)
+        case _ =>
+          Credentials(Path.userHome / ".ivy2" / ".credentials")
+      }
+    }
 }
